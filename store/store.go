@@ -64,6 +64,8 @@ type Store struct {
 	MetaBlob
 	fp *os.File
 
+	idx *Index
+
 	mu sync.Mutex
 }
 
@@ -77,6 +79,7 @@ func (s *Store) Open(dataFile string, createIfNotExists bool) error {
 				return errors.Trace(err)
 			}
 			s.fp = fp
+			s.idx = NewIndex()
 			return nil
 		}
 		return errors.New("store: open store error, no such file")
@@ -104,6 +107,7 @@ func (s *Store) Open(dataFile string, createIfNotExists bool) error {
 
 	s.MetaBlob.FromBytes(buf)
 	s.fp = fp
+	s.idx = NewIndex()
 
 	log.Info("Load store successfully, ID: ", s.MetaBlob.ID())
 	return nil
@@ -131,7 +135,7 @@ func (s *Store) createNewStoreFile(dataFile string) (*os.File, error) {
 	return fp, nil
 }
 
-func (s *Store) WriteNeedle(n *Needle) error {
+func (s *Store) WriteNeedle(n *Needle, needSync bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -140,6 +144,7 @@ func (s *Store) WriteNeedle(n *Needle) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// padding
 	if offset%Padding != 0 {
 		offset = offset + (Padding - offset%Padding)
 		offset, err = s.fp.Seek(offset, 0)
@@ -147,5 +152,21 @@ func (s *Store) WriteNeedle(n *Needle) error {
 			return errors.Trace(err)
 		}
 	}
+
 	buf := n.Bytes()
+	_, err = s.fp.Write(buf)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if needSync {
+		s.fp.Sync()
+	}
+	// update index
+
+	if oldOffset, ok := s.idx.Get(n.ID); !ok || oldOffset < offset {
+		s.idx.Put(n.ID, offset)
+	}
+
+	return nil
 }

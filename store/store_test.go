@@ -43,3 +43,6 @@ func TestCreateStore(t *testing.T) {
 	assert.EqualValues(t, s1.MetaBlob.MaxSize, DefaultStoreSize)
 	assert.EqualValues(t, s1.MetaBlob.Version, 1)
 }
+
+func TestWriteNeedle(t *testing.T) {
+}

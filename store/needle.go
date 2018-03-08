@@ -22,7 +22,7 @@ func (n *Needle) Bytes() []byte {
 
 	needleBuf := bytes.NewBuffer(nil)
 	needleBuf.Write(Uint64ToBytes(n.ID))
-	needleBuf.Write(Uint32(uint32(len(dataBytes))))
+	needleBuf.Write(Uint32ToBytes(uint32(len(dataBytes))))
 	needleBuf.Write(dataBytes)
 
 	return needleBuf.Bytes()
