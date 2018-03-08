@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"encoding/binary"
+	"hash/crc32"
 	"io"
 	"os"
 	"sync"
@@ -135,38 +136,62 @@ func (s *Store) createNewStoreFile(dataFile string) (*os.File, error) {
 	return fp, nil
 }
 
-func (s *Store) WriteNeedle(n *Needle, needSync bool) error {
+func (s *Store) ReadNeedleWithOffsetAndSize(offset int64, size uint32) (*Needle, error) {
+	b := make([]byte, size)
+	_, err := s.fp.ReadAt(b, offset)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	ID := binary.LittleEndian.Uint64(b[0:8])
+	dataSize := binary.LittleEndian.Uint32(b[8:12])
+
+	data := b[12 : 12+dataSize]
+	checkSum := binary.LittleEndian.Uint32(b[12+dataSize : 12+dataSize+4])
+	h := crc32.NewIEEE()
+	h.Write(data)
+	if checkSum != h.Sum32() {
+		return nil, errors.New("invalid needle payload")
+	}
+	n := &Needle{
+		ID:       ID,
+		Data:     data,
+		CheckSum: checkSum,
+	}
+	return n, nil
+}
+
+func (s *Store) WriteNeedle(n *Needle, needSync bool) (int64, uint32, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// seek to the end
 	offset, err := s.fp.Seek(0, 2)
 	if err != nil {
-		return errors.Trace(err)
+		return 0, 0, errors.Trace(err)
 	}
 	// padding
 	if offset%Padding != 0 {
 		offset = offset + (Padding - offset%Padding)
 		offset, err = s.fp.Seek(offset, 0)
 		if err != nil {
-			return errors.Trace(err)
+			return 0, 0, errors.Trace(err)
 		}
 	}
 
 	buf := n.Bytes()
 	_, err = s.fp.Write(buf)
 	if err != nil {
-		return errors.Trace(err)
+		return 0, 0, errors.Trace(err)
 	}
 
 	if needSync {
 		s.fp.Sync()
 	}
 	// update index
-
-	if oldOffset, ok := s.idx.Get(n.ID); !ok || oldOffset < offset {
-		s.idx.Put(n.ID, offset)
+	if payload, ok := s.idx.Get(n.ID); !ok || payload.offset < offset {
+		s.idx.Put(n.ID, offset, uint32(len(buf)))
 	}
 
-	return nil
+	return offset, uint32(len(buf)), nil
 }

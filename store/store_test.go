@@ -45,4 +45,13 @@ func TestCreateStore(t *testing.T) {
 }
 
 func TestWriteNeedle(t *testing.T) {
+	n := NewNeedle(100, []byte("foobar"))
+
+	s := new(Store)
+	s.Open("hello.dat", true)
+
+	offset, sz, _ := s.WriteNeedle(n, false)
+	nn, err := s.ReadNeedleWithOffsetAndSize(offset, sz)
+	assert.Nil(t, err)
+	assert.EqualValues(t, n, nn)
 }
