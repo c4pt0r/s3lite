@@ -1,16 +1,19 @@
 package store
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 	"os"
 	"sync"
 
 	"github.com/juju/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
 	MetaBlobSize     = 2 + 8 + 4 + 64
+	Padding          = 8
 	DefaultStoreSize = 4 * 1024 * 1024 * 1024 // 4GB
 )
 
@@ -89,6 +92,9 @@ func (s *Store) Open(dataFile string, createIfNotExists bool) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if !bytes.Equal(STORE_MAGIC, buf) {
+		return errors.New("store: magic not match, invalid store")
+	}
 
 	buf = make([]byte, MetaBlobSize)
 	_, err = io.ReadFull(fp, buf)
@@ -98,10 +104,13 @@ func (s *Store) Open(dataFile string, createIfNotExists bool) error {
 
 	s.MetaBlob.FromBytes(buf)
 	s.fp = fp
+
+	log.Info("Load store successfully, ID: ", s.MetaBlob.ID())
 	return nil
 }
 
 func (s *Store) createNewStoreFile(dataFile string) (*os.File, error) {
+	log.Info("Creating store, ID: ", s.MetaBlob.ID())
 	fp, err := os.OpenFile(dataFile, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -120,4 +129,23 @@ func (s *Store) createNewStoreFile(dataFile string) (*os.File, error) {
 	}
 	fp.Sync()
 	return fp, nil
+}
+
+func (s *Store) WriteNeedle(n *Needle) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// seek to the end
+	offset, err := s.fp.Seek(0, 2)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if offset%Padding != 0 {
+		offset = offset + (Padding - offset%Padding)
+		offset, err = s.fp.Seek(offset, 0)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	buf := n.Bytes()
 }

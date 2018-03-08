@@ -14,8 +14,16 @@ type Needle struct {
 }
 
 func (n *Needle) Bytes() []byte {
-	buf := bytes.NewBuffer()
+	buf := bytes.NewBuffer(nil)
 	buf.Write(Uint32ToBytes(n.DataSize))
-	buf.Write(Uint32ToBytes(n.Data))
+	buf.Write(n.Data)
 	buf.Write(Uint32ToBytes(n.CheckSum))
+	dataBytes := buf.Bytes()
+
+	needleBuf := bytes.NewBuffer(nil)
+	needleBuf.Write(Uint64ToBytes(n.ID))
+	needleBuf.Write(Uint32(uint32(len(dataBytes))))
+	needleBuf.Write(dataBytes)
+
+	return needleBuf.Bytes()
 }
