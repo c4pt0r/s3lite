@@ -3,7 +3,6 @@ package store
 import (
 	"bytes"
 	"encoding/binary"
-	"hash/crc32"
 	"io"
 	"os"
 	"sync"
@@ -136,6 +135,31 @@ func (s *Store) createNewStoreFile(dataFile string) (*os.File, error) {
 	return fp, nil
 }
 
+func (s *Store) ReadNeedleAt(offset int64) (*Needle, error) {
+	// | id | data size |
+	b := make([]byte, 8+4)
+	_, err := s.fp.ReadAt(b, offset)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// read data size
+	dataSize := binary.LittleEndian.Uint32(b[8:12])
+	b = make([]byte, 12+dataSize+4)
+	_, err = s.fp.ReadAt(b, offset)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	n := &Needle{}
+	err = n.FromPayload(b)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return n, nil
+}
+
 func (s *Store) ReadNeedleWithOffsetAndSize(offset int64, size uint32) (*Needle, error) {
 	b := make([]byte, size)
 	_, err := s.fp.ReadAt(b, offset)
@@ -143,20 +167,10 @@ func (s *Store) ReadNeedleWithOffsetAndSize(offset int64, size uint32) (*Needle,
 		return nil, errors.Trace(err)
 	}
 
-	ID := binary.LittleEndian.Uint64(b[0:8])
-	dataSize := binary.LittleEndian.Uint32(b[8:12])
-
-	data := b[12 : 12+dataSize]
-	checkSum := binary.LittleEndian.Uint32(b[12+dataSize : 12+dataSize+4])
-	h := crc32.NewIEEE()
-	h.Write(data)
-	if checkSum != h.Sum32() {
-		return nil, errors.New("invalid needle payload")
-	}
-	n := &Needle{
-		ID:       ID,
-		Data:     data,
-		CheckSum: checkSum,
+	n := &Needle{}
+	err = n.FromPayload(b)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 	return n, nil
 }

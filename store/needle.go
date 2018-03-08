@@ -24,7 +24,7 @@ func NewNeedle(ID uint64, data []byte) *Needle {
 	return n
 }
 
-//payload:  | id (8bytes) | data size (4 bytes) | data | checksum (4bytes)
+//payload:  | id (8bytes) | data size (4 bytes) | data | checksum (4bytes) |
 func (n *Needle) FromPayload(b []byte) error {
 	if len(b) < 16 {
 		return errors.New("invalid needle header")

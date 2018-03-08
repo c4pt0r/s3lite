@@ -54,4 +54,8 @@ func TestWriteNeedle(t *testing.T) {
 	nn, err := s.ReadNeedleWithOffsetAndSize(offset, sz)
 	assert.Nil(t, err)
 	assert.EqualValues(t, n, nn)
+
+	nn1, err := s.ReadNeedleAt(offset)
+	assert.Nil(t, err)
+	assert.EqualValues(t, n, nn1)
 }

@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/binary"
+	"io"
 	"os"
 
 	"github.com/juju/errors"
@@ -60,5 +61,23 @@ func (i *Index) Dump(filename string) error {
 }
 
 func (i *Index) Open(filepath string) error {
+	fp, err := os.OpenFile(filepath, os.O_RDWR, 0644)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	for {
+		b := make([]byte, 8+8+4)
+		_, err := io.ReadFull(fp, b)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		ID := binary.LittleEndian.Uint64(b[0:8])
+		offset := binary.LittleEndian.Uint64(b[8:16])
+		sz := binary.LittleEndian.Uint32(b[16:20])
+
+		i.m[ID] = &Payload{int64(offset), sz}
+	}
+
 	return nil
 }
