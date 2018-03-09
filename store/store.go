@@ -62,8 +62,7 @@ func (m MetaBlob) ID() string {
 
 type Store struct {
 	MetaBlob
-	fp *os.File
-
+	fp  *os.File
 	idx *Index
 
 	mu sync.Mutex
@@ -173,6 +172,10 @@ func (s *Store) ReadNeedleWithOffsetAndSize(offset int64, size uint32) (*Needle,
 		return nil, errors.Trace(err)
 	}
 	return n, nil
+}
+
+func (s *Store) DeleteNeedle(offset int64, key uint64) {
+
 }
 
 func (s *Store) WriteNeedle(n *Needle, needSync bool) (int64, uint32, error) {
