@@ -15,9 +15,8 @@ import (
 )
 
 const (
-	MetaBlobSize     = 2 + 8 + 4 + 64
-	Padding          = 8
-	DefaultStoreSize = 4 * 1024 * 1024 * 1024 // 4GB
+	MetaBlobSize = 2 + 8 + 4 + 64
+	Padding      = 8
 )
 
 var (
@@ -28,55 +27,9 @@ const (
 	NEEDLE_FLAG_DELETE = 1 << iota
 )
 
-const (
-	STORE_FLAG_READ_ONLY = 1 << iota
-)
-
-// fixed size meta
-type MetaBlob struct {
-	Version uint16
-	MaxSize uint64
-	Flags   uint32
-	StoreID [64]byte
-}
-
-func (m *MetaBlob) Bytes() []byte {
-	buf := make([]byte, MetaBlobSize)
-	binary.LittleEndian.PutUint16(buf, m.Version)
-	binary.LittleEndian.PutUint64(buf[2:10], m.MaxSize)
-	binary.LittleEndian.PutUint32(buf[10:14], m.Flags)
-	copy(buf[14:], m.StoreID[:])
-	return buf
-}
-
-func (m *MetaBlob) SetFlag(flag int) {
-	m.Flags |= uint32(flag)
-}
-
-func (m *MetaBlob) FromBytes(buf []byte) error {
-	if len(buf) != MetaBlobSize {
-		return errors.New("invalid meta blob")
-	}
-	m.Version = binary.LittleEndian.Uint16(buf[0:2])
-	m.MaxSize = binary.LittleEndian.Uint64(buf[2:10])
-	m.Flags = binary.LittleEndian.Uint32(buf[10:14])
-	copy(m.StoreID[:], buf[14:])
-	return nil
-}
-
-func (m MetaBlob) ID() string {
-	var buf []byte
-	for _, c := range m.StoreID {
-		if c == 0x0 {
-			break
-		}
-		buf = append(buf, c)
-	}
-	return string(buf)
-}
-
 type Store struct {
 	MetaBlob
+	conf       *StoreConfig
 	fp         *os.File
 	lastOffset int64
 	idx        *Index
@@ -88,7 +41,17 @@ type Store struct {
 	mu sync.Mutex
 }
 
+func NewStoreWithIDAndConfig(ID string, cfg *StoreConfig) *Store {
+	ret := &Store{}
+	ret.MetaBlob.SetID(ID)
+	ret.MetaBlob.Version = cfg.Version
+	ret.MetaBlob.MaxSize = cfg.MaxSize
+	return ret
+}
+
 func (s *Store) Join(nodeName string, nodeGossipAddr string, nodeGossipPort int, peerAddrs []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	// TODO: make it configurable
 	cfg := memberlist.DefaultLocalConfig()
 	if len(nodeName) > 0 {
@@ -123,7 +86,23 @@ func (s *Store) Join(nodeName string, nodeGossipAddr string, nodeGossipPort int,
 	return nil
 }
 
-func (s *Store) Open(dataFile string, createIfNotExists bool) error {
+func (s *Store) SetStoreID(ID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.MetaBlob.SetID(ID)
+}
+
+func (s *Store) Open(createIfNotExists bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(s.MetaBlob.ID()) == 0 {
+		panic("missing store id")
+	}
+
+	dataFile := s.MetaBlob.ID() + ".dat"
+
 	_, err := os.Stat(dataFile)
 	if os.IsNotExist(err) {
 		if createIfNotExists {
@@ -148,7 +127,6 @@ func (s *Store) Open(dataFile string, createIfNotExists bool) error {
 		s.fp.Close()
 		return errors.Trace(err)
 	}
-
 	// load index
 	s.idx = NewIndex()
 	log.Info("Load store successfully, ID: ", s.MetaBlob.ID())
@@ -282,11 +260,9 @@ func (s *Store) DeleteNeedle(n *Needle) {
 func (s *Store) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	// close file
 	s.fp.Sync()
 	s.fp.Close()
-
 	// tell peers it's leaving
 	s.memberList.Shutdown()
 }
@@ -298,7 +274,6 @@ func (s *Store) WriteNeedle(n *Needle, needSync bool) (int64, uint32, error) {
 	if s.IsReadOnly() {
 		return 0, 0, errors.New("this store is read-only")
 	}
-
 	// seek to the end
 	offset, err := s.fp.Seek(0, 2)
 	if err != nil {
@@ -312,13 +287,11 @@ func (s *Store) WriteNeedle(n *Needle, needSync bool) (int64, uint32, error) {
 			return 0, 0, errors.Trace(err)
 		}
 	}
-
 	buf := n.Bytes()
 	_, err = s.fp.Write(buf)
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}
-
 	if needSync {
 		s.fp.Sync()
 	}
@@ -326,12 +299,9 @@ func (s *Store) WriteNeedle(n *Needle, needSync bool) (int64, uint32, error) {
 	if payload, ok := s.idx.Get(n.ID); !ok || payload.offset < offset {
 		s.idx.Put(n.ID, offset, uint32(len(buf)))
 	}
-
 	if uint64(offset) > s.MetaBlob.MaxSize {
 		s.setReadonly()
 	}
-
 	s.lastOffset = offset
-
 	return offset, uint32(len(buf)), nil
 }

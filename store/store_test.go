@@ -23,21 +23,21 @@ func TestMetaBlob(t *testing.T) {
 }
 
 func TestCreateStore(t *testing.T) {
-	s := new(Store)
+	s := NewStoreWithIDAndConfig("hello", NewDefaultStoreConfig())
 
 	copy(s.MetaBlob.StoreID[0:], []byte("hello"))
 	s.MetaBlob.MaxSize = DefaultStoreSize
 	s.MetaBlob.Version = 1
 
-	err := s.Open("hello.dat", true)
+	err := s.Open(true)
 	assert.Nil(t, err)
 
 	defer func() {
 		os.Remove("hello.dat")
 	}()
 
-	s1 := new(Store)
-	err = s1.Open("hello.dat", false)
+	s1 := NewStoreWithIDAndConfig("hello", NewDefaultStoreConfig())
+	err = s1.Open(false)
 	assert.Nil(t, err)
 
 	assert.EqualValues(t, s1.MetaBlob.ID(), "hello")
@@ -48,8 +48,8 @@ func TestCreateStore(t *testing.T) {
 func TestWriteNeedle(t *testing.T) {
 	n := NewNeedle(100, []byte("foobar"))
 
-	s := new(Store)
-	s.Open("hello-readonly.dat", true)
+	s := NewStoreWithIDAndConfig("hello-readonly", NewDefaultStoreConfig())
+	s.Open(true)
 
 	defer func() {
 		os.Remove("hello-readonly.dat")
@@ -72,8 +72,8 @@ func TestWriteNeedle(t *testing.T) {
 }
 
 func TestStoreJoin(t *testing.T) {
-	s := new(Store)
-	err := s.Open("hello.dat", true)
+	s := NewStoreWithIDAndConfig("hello", NewDefaultStoreConfig())
+	err := s.Open(true)
 	assert.Nil(t, err)
 	defer func() {
 		os.Remove("hello.dat")
@@ -82,8 +82,8 @@ func TestStoreJoin(t *testing.T) {
 	err = s.Join("s", "", 7940, []string{})
 	assert.Nil(t, err)
 
-	s1 := new(Store)
-	s1.Open("hello1.dat", true)
+	s1 := NewStoreWithIDAndConfig("hello1", NewDefaultStoreConfig())
+	s1.Open(true)
 	defer func() {
 		os.Remove("hello1.dat")
 	}()
@@ -91,8 +91,8 @@ func TestStoreJoin(t *testing.T) {
 	err = s1.Join("s1", "", 7941, []string{"127.0.0.1:7940"})
 	assert.Nil(t, err)
 
-	s2 := new(Store)
-	s2.Open("hello2.dat", true)
+	s2 := NewStoreWithIDAndConfig("hello2", NewDefaultStoreConfig())
+	s2.Open(true)
 	defer func() {
 		os.Remove("hello2.dat")
 	}()

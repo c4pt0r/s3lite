@@ -12,11 +12,12 @@ type Server struct {
 	store *Store
 }
 
-func (s *Server) OpenStore(storePath string) error {
-	store := new(Store)
-	if err := store.Open(storePath, false); err != nil {
+func (s *Server) Init(storeID string, initPeers []string) error {
+	store := NewStoreWithIDAndConfig(storeID, NewDefaultStoreConfig())
+	if err := store.Open(false); err != nil {
 		return errors.Trace(err)
 	}
+	store.Join("", "", 0, initPeers)
 	s.store = store
 	return nil
 }
