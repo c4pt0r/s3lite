@@ -9,6 +9,7 @@ import (
 
 type Needle struct {
 	ID       uint64
+	Flags    uint32
 	Data     []byte
 	CheckSum uint32 // crc32
 }
@@ -32,15 +33,17 @@ func (n *Needle) FromPayload(b []byte) error {
 	// read 64 bits ID
 	ID := binary.LittleEndian.Uint64(b[0:8])
 	// read payload size
-	dataSize := binary.LittleEndian.Uint32(b[8:12])
+	flags := binary.LittleEndian.Uint32(b[8:12])
+	dataSize := binary.LittleEndian.Uint32(b[12:16])
 	if dataSize+16 > uint32(len(b)) {
 		return errors.New("invalid needle payload")
 	}
 
 	n.ID = ID
+	n.Flags = flags
 	// should we copy here?
-	n.Data = b[12 : 12+dataSize]
-	n.CheckSum = binary.LittleEndian.Uint32(b[12+dataSize:])
+	n.Data = b[16 : 16+dataSize]
+	n.CheckSum = binary.LittleEndian.Uint32(b[16+dataSize:])
 
 	h := crc32.NewIEEE()
 	h.Write(n.Data)
@@ -54,6 +57,7 @@ func (n *Needle) Bytes() []byte {
 	buf := bytes.NewBuffer(nil)
 
 	buf.Write(Uint64ToBytes(n.ID))
+	buf.Write(Uint32ToBytes(n.Flags))
 	buf.Write(Uint32ToBytes(uint32(len(n.Data))))
 	buf.Write(n.Data)
 

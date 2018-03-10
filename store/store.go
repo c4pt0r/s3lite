@@ -21,6 +21,10 @@ var (
 	STORE_MAGIC = []byte{'\xc4', '\xc4'}
 )
 
+const (
+	FLAG_DELETE = 1 << iota
+)
+
 // fixed size meta
 type MetaBlob struct {
 	Version uint16
@@ -174,8 +178,9 @@ func (s *Store) ReadNeedleWithOffsetAndSize(offset int64, size uint32) (*Needle,
 	return n, nil
 }
 
-func (s *Store) DeleteNeedle(offset int64, key uint64) {
-
+func (s *Store) DeleteNeedle(n *Needle) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 }
 
 func (s *Store) WriteNeedle(n *Needle, needSync bool) (int64, uint32, error) {
