@@ -3,10 +3,12 @@ package store
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"os"
 	"sync"
 
+	"github.com/c4pt0r/memberlist"
 	"github.com/juju/errors"
 	log "github.com/sirupsen/logrus"
 )
@@ -78,6 +80,30 @@ type Store struct {
 	idx *Index
 
 	mu sync.Mutex
+}
+
+func (s *Store) Join(peerAddrs []string) error {
+	cfg := memberlist.DefaultLocalConfig()
+	cfg.Delegate = &StoreNodeDelegate{
+		Meta: "type=storage",
+	}
+
+	list, err := memberlist.Create(cfg)
+	if err != nil {
+		return errors.New("Failed to join: " + err.Error())
+	}
+
+	_, err = list.Join(peerAddrs)
+	if err != nil {
+		return errors.New("Failed to join cluster: " + err.Error())
+	}
+
+	// Ask for members of the cluster
+	for _, member := range list.Members() {
+		fmt.Printf("Member: %s %s\n", member.Name, member.Addr)
+	}
+
+	return nil
 }
 
 func (s *Store) Open(dataFile string, createIfNotExists bool) error {
