@@ -22,7 +22,11 @@ var (
 )
 
 const (
-	FLAG_DELETE = 1 << iota
+	NEEDLE_FLAG_DELETE = 1 << iota
+)
+
+const (
+	STORE_FLAG_READ_ONLY = 1 << iota
 )
 
 // fixed size meta
@@ -40,6 +44,10 @@ func (m *MetaBlob) Bytes() []byte {
 	binary.LittleEndian.PutUint32(buf[10:14], m.Flags)
 	copy(buf[14:], m.StoreID[:])
 	return buf
+}
+
+func (m *MetaBlob) SetFlag(flag int) {
+	m.Flags |= uint32(flag)
 }
 
 func (m *MetaBlob) FromBytes(buf []byte) error {
@@ -92,28 +100,59 @@ func (s *Store) Open(dataFile string, createIfNotExists bool) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	s.fp = fp
+	if err := s.loadMetaBlob(); err != nil {
+		s.fp.Close()
+		return errors.Trace(err)
+	}
+
+	s.idx = NewIndex()
+	log.Info("Load store successfully, ID: ", s.MetaBlob.ID())
+	return nil
+}
+
+func (s *Store) loadMetaBlob() error {
+	s.fp.Seek(0, 0)
 	// read meta blob
 	buf := make([]byte, 2)
-	_, err = io.ReadFull(fp, buf)
+	_, err := io.ReadFull(s.fp, buf)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	if !bytes.Equal(STORE_MAGIC, buf) {
 		return errors.New("store: magic not match, invalid store")
 	}
-
 	buf = make([]byte, MetaBlobSize)
-	_, err = io.ReadFull(fp, buf)
+	_, err = io.ReadFull(s.fp, buf)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	return s.MetaBlob.FromBytes(buf)
+}
 
-	s.MetaBlob.FromBytes(buf)
-	s.fp = fp
-	s.idx = NewIndex()
+func (s *Store) SetReadOnly() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	log.Info("Load store successfully, ID: ", s.MetaBlob.ID())
+	if err := s.loadMetaBlob(); err != nil {
+		return errors.Trace(err)
+	}
+
+	// set flag
+	s.MetaBlob.SetFlag(STORE_FLAG_READ_ONLY)
+
+	// skip magic
+	_, err := s.fp.WriteAt(s.MetaBlob.Bytes(), 2)
+	if err != nil {
+		s.fp.Close()
+		return errors.Trace(err)
+	}
+	s.fp.Sync()
 	return nil
+}
+
+func (s *Store) IsReadOnly() bool {
+	return s.MetaBlob.Flags&STORE_FLAG_READ_ONLY == 1
 }
 
 func (s *Store) createNewStoreFile(dataFile string) (*os.File, error) {
@@ -140,15 +179,15 @@ func (s *Store) createNewStoreFile(dataFile string) (*os.File, error) {
 
 func (s *Store) ReadNeedleAt(offset int64) (*Needle, error) {
 	// | id | data size |
-	b := make([]byte, 8+4)
+	b := make([]byte, 8+8)
 	_, err := s.fp.ReadAt(b, offset)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	// read data size
-	dataSize := binary.LittleEndian.Uint32(b[8:12])
-	b = make([]byte, 12+dataSize+4)
+	dataSize := binary.LittleEndian.Uint32(b[12:16])
+	b = make([]byte, 16+dataSize+4)
 	_, err = s.fp.ReadAt(b, offset)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -186,6 +225,10 @@ func (s *Store) DeleteNeedle(n *Needle) {
 func (s *Store) WriteNeedle(n *Needle, needSync bool) (int64, uint32, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.IsReadOnly() {
+		return 0, 0, errors.New("this store is read-only")
+	}
 
 	// seek to the end
 	offset, err := s.fp.Seek(0, 2)

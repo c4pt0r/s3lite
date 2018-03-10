@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,11 +17,8 @@ func TestMetaBlob(t *testing.T) {
 	buf := m.Bytes()
 	assert.Equal(t, len(buf), MetaBlobSize)
 
-	fmt.Println(buf)
-
 	m1 := new(MetaBlob)
 	m1.FromBytes(buf)
-	fmt.Println(*m1)
 	assert.EqualValues(t, m1.Version, 1)
 	assert.EqualValues(t, m1.ID(), "hello")
 }
@@ -35,6 +33,10 @@ func TestCreateStore(t *testing.T) {
 	err := s.Open("hello.dat", true)
 	assert.Nil(t, err)
 
+	defer func() {
+		os.Remove("hello.dat")
+	}()
+
 	s1 := new(Store)
 	err = s1.Open("hello.dat", false)
 	assert.Nil(t, err)
@@ -48,7 +50,11 @@ func TestWriteNeedle(t *testing.T) {
 	n := NewNeedle(100, []byte("foobar"))
 
 	s := new(Store)
-	s.Open("hello.dat", true)
+	s.Open("hello-readonly.dat", true)
+
+	defer func() {
+		os.Remove("hello-readonly.dat")
+	}()
 
 	offset, sz, _ := s.WriteNeedle(n, false)
 	nn, err := s.ReadNeedleWithOffsetAndSize(offset, sz)
@@ -58,4 +64,11 @@ func TestWriteNeedle(t *testing.T) {
 	nn1, err := s.ReadNeedleAt(offset)
 	assert.Nil(t, err)
 	assert.EqualValues(t, n, nn1)
+
+	err = s.SetReadOnly()
+	assert.Nil(t, err)
+
+	_, _, err = s.WriteNeedle(n, false)
+	assert.NotNil(t, err)
+	fmt.Println(err.Error())
 }

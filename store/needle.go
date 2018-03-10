@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash/crc32"
 )
 
@@ -36,6 +37,7 @@ func (n *Needle) FromPayload(b []byte) error {
 	flags := binary.LittleEndian.Uint32(b[8:12])
 	dataSize := binary.LittleEndian.Uint32(b[12:16])
 	if dataSize+16 > uint32(len(b)) {
+		fmt.Println(dataSize+16, len(b))
 		return errors.New("invalid needle payload")
 	}
 
