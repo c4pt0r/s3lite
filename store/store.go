@@ -3,7 +3,6 @@ package store
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -79,10 +78,13 @@ type Store struct {
 	fp  *os.File
 	idx *Index
 
-	mu sync.Mutex
+	// peer list (all nodes), available after calling Join
+	memberList *memberlist.Memberlist
+	mu         sync.Mutex
 }
 
 func (s *Store) Join(nodeName string, nodeGossipAddr string, nodeGossipPort int, peerAddrs []string) error {
+	// TODO: make it configurable
 	cfg := memberlist.DefaultLocalConfig()
 	if len(nodeName) > 0 {
 		cfg.Name = nodeName
@@ -107,12 +109,7 @@ func (s *Store) Join(nodeName string, nodeGossipAddr string, nodeGossipPort int,
 		return errors.New("Failed to join cluster: " + err.Error())
 	}
 
-	// Ask for members of the cluster
-	fmt.Println(list.NumMembers())
-	for _, member := range list.Members() {
-		fmt.Printf("Member: %s %s %s\n", member.Name, member.Addr, string(member.Meta))
-	}
-
+	s.memberList = list
 	return nil
 }
 
