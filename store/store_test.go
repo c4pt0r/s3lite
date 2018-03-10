@@ -1,7 +1,6 @@
 package store
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
@@ -70,7 +69,6 @@ func TestWriteNeedle(t *testing.T) {
 
 	_, _, err = s.WriteNeedle(n, false)
 	assert.NotNil(t, err)
-	fmt.Println(err.Error())
 }
 
 func TestStoreJoin(t *testing.T) {
@@ -102,4 +100,5 @@ func TestStoreJoin(t *testing.T) {
 	err = s2.Join("s2", "", 7942, []string{"127.0.0.1:7940"})
 	assert.Nil(t, err)
 
+	s2.SetReadOnly()
 }

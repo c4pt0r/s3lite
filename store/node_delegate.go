@@ -1,14 +1,27 @@
 package store
 
+import (
+	"encoding/json"
+
+	"github.com/c4pt0r/s3lite/meta"
+)
+
+type StorageNodeInfo struct {
+	meta.NodeInfo
+
+	IsReadOnly bool `json:"readonly"`
+}
+
 type StoreNodeDelegate struct {
-	Meta string
+	Info *StorageNodeInfo
 }
 
 func (d *StoreNodeDelegate) NodeMeta(limit int) []byte {
-	if len(d.Meta) > limit {
+	buf, _ := json.Marshal(d.Info)
+	if len(buf) > limit {
 		panic("node meta is too large")
 	}
-	return []byte(d.Meta)
+	return []byte(buf)
 }
 
 func (d *StoreNodeDelegate) NotifyMsg([]byte) {

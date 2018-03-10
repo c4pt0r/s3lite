@@ -6,8 +6,10 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/c4pt0r/memberlist"
+	"github.com/c4pt0r/s3lite/meta"
 	"github.com/juju/errors"
 	log "github.com/sirupsen/logrus"
 )
@@ -75,12 +77,15 @@ func (m MetaBlob) ID() string {
 
 type Store struct {
 	MetaBlob
-	fp  *os.File
-	idx *Index
+	fp         *os.File
+	lastOffset int64
+	idx        *Index
 
 	// peer list (all nodes), available after calling Join
 	memberList *memberlist.Memberlist
-	mu         sync.Mutex
+	nodeInfo   *StorageNodeInfo
+
+	mu sync.Mutex
 }
 
 func (s *Store) Join(nodeName string, nodeGossipAddr string, nodeGossipPort int, peerAddrs []string) error {
@@ -95,10 +100,15 @@ func (s *Store) Join(nodeName string, nodeGossipAddr string, nodeGossipPort int,
 	if nodeGossipPort > 0 {
 		cfg.BindPort = nodeGossipPort
 	}
-	cfg.Delegate = &StoreNodeDelegate{
-		Meta: "type=storage",
+
+	s.nodeInfo = &StorageNodeInfo{
+		NodeInfo: meta.NodeInfo{
+			Type: meta.NODE_TYPE_STORE,
+		},
+		IsReadOnly: s.IsReadOnly(),
 	}
 
+	cfg.Delegate = &StoreNodeDelegate{s.nodeInfo}
 	list, err := memberlist.Create(cfg)
 	if err != nil {
 		return errors.New("Failed to join: " + err.Error())
@@ -139,6 +149,7 @@ func (s *Store) Open(dataFile string, createIfNotExists bool) error {
 		return errors.Trace(err)
 	}
 
+	// load index
 	s.idx = NewIndex()
 	log.Info("Load store successfully, ID: ", s.MetaBlob.ID())
 	return nil
@@ -163,10 +174,7 @@ func (s *Store) loadMetaBlob() error {
 	return s.MetaBlob.FromBytes(buf)
 }
 
-func (s *Store) SetReadOnly() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *Store) setReadonly() error {
 	if err := s.loadMetaBlob(); err != nil {
 		return errors.Trace(err)
 	}
@@ -181,7 +189,22 @@ func (s *Store) SetReadOnly() error {
 		return errors.Trace(err)
 	}
 	s.fp.Sync()
+
+	// boardcast status change
+	if s.memberList != nil {
+		s.nodeInfo.IsReadOnly = true
+		err = s.memberList.UpdateNode(10 * time.Second)
+		if err != nil {
+			log.Error(err)
+		}
+	}
 	return nil
+}
+
+func (s *Store) SetReadOnly() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.setReadonly()
 }
 
 func (s *Store) IsReadOnly() bool {
@@ -253,6 +276,19 @@ func (s *Store) ReadNeedleWithOffsetAndSize(offset int64, size uint32) (*Needle,
 func (s *Store) DeleteNeedle(n *Needle) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	panic("todo")
+}
+
+func (s *Store) Close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// close file
+	s.fp.Sync()
+	s.fp.Close()
+
+	// tell peers it's leaving
+	s.memberList.Shutdown()
 }
 
 func (s *Store) WriteNeedle(n *Needle, needSync bool) (int64, uint32, error) {
@@ -290,6 +326,12 @@ func (s *Store) WriteNeedle(n *Needle, needSync bool) (int64, uint32, error) {
 	if payload, ok := s.idx.Get(n.ID); !ok || payload.offset < offset {
 		s.idx.Put(n.ID, offset, uint32(len(buf)))
 	}
+
+	if uint64(offset) > s.MetaBlob.MaxSize {
+		s.setReadonly()
+	}
+
+	s.lastOffset = offset
 
 	return offset, uint32(len(buf)), nil
 }

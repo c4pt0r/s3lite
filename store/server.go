@@ -9,15 +9,7 @@ import (
 )
 
 type Server struct {
-	Addr string
-
 	store *Store
-}
-
-func NewServer(addr string) *Server {
-	return &Server{
-		Addr: addr,
-	}
 }
 
 func (s *Server) OpenStore(storePath string) error {
@@ -33,8 +25,8 @@ func (s *Server) handler(w http.ResponseWriter, req *http.Request) {
 	io.WriteString(w, "hello, world!\n")
 }
 
-func (s *Server) Serve() error {
-	log.Info("HTTP server starts serving...", s.Addr)
+func (s *Server) Serve(addr string) error {
+	log.Info("HTTP server starts serving...", addr)
 	http.HandleFunc("/", s.handler)
-	return http.ListenAndServe(s.Addr, nil)
+	return http.ListenAndServe(addr, nil)
 }
