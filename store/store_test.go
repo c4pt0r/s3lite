@@ -72,3 +72,34 @@ func TestWriteNeedle(t *testing.T) {
 	assert.NotNil(t, err)
 	fmt.Println(err.Error())
 }
+
+func TestStoreJoin(t *testing.T) {
+	s := new(Store)
+	err := s.Open("hello.dat", true)
+	assert.Nil(t, err)
+	defer func() {
+		os.Remove("hello.dat")
+	}()
+
+	err = s.Join("s", "", 7940, []string{})
+	assert.Nil(t, err)
+
+	s1 := new(Store)
+	s1.Open("hello1.dat", true)
+	defer func() {
+		os.Remove("hello1.dat")
+	}()
+
+	err = s1.Join("s1", "", 7941, []string{"127.0.0.1:7940"})
+	assert.Nil(t, err)
+
+	s2 := new(Store)
+	s2.Open("hello2.dat", true)
+	defer func() {
+		os.Remove("hello2.dat")
+	}()
+
+	err = s2.Join("s2", "", 7942, []string{"127.0.0.1:7940"})
+	assert.Nil(t, err)
+
+}

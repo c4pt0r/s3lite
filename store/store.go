@@ -82,8 +82,17 @@ type Store struct {
 	mu sync.Mutex
 }
 
-func (s *Store) Join(peerAddrs []string) error {
+func (s *Store) Join(nodeName string, nodeGossipAddr string, nodeGossipPort int, peerAddrs []string) error {
 	cfg := memberlist.DefaultLocalConfig()
+	if len(nodeName) > 0 {
+		cfg.Name = nodeName
+	}
+	if len(nodeGossipAddr) > 0 {
+		cfg.BindAddr = nodeGossipAddr
+	}
+	if nodeGossipPort > 0 {
+		cfg.BindPort = nodeGossipPort
+	}
 	cfg.Delegate = &StoreNodeDelegate{
 		Meta: "type=storage",
 	}
@@ -99,8 +108,9 @@ func (s *Store) Join(peerAddrs []string) error {
 	}
 
 	// Ask for members of the cluster
+	fmt.Println(list.NumMembers())
 	for _, member := range list.Members() {
-		fmt.Printf("Member: %s %s\n", member.Name, member.Addr)
+		fmt.Printf("Member: %s %s %s\n", member.Name, member.Addr, string(member.Meta))
 	}
 
 	return nil
