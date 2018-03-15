@@ -44,8 +44,10 @@ type Store struct {
 func NewStoreWithIDAndConfig(ID string, cfg *StoreConfig) *Store {
 	ret := &Store{}
 	ret.MetaBlob.SetID(ID)
-	ret.MetaBlob.Version = cfg.Version
-	ret.MetaBlob.MaxSize = cfg.MaxSize
+	if cfg != nil {
+		ret.MetaBlob.Version = cfg.Version
+		ret.MetaBlob.MaxSize = cfg.MaxSize
+	}
 	return ret
 }
 
@@ -209,6 +211,17 @@ func (s *Store) createNewStoreFile(dataFile string) (*os.File, error) {
 	}
 	fp.Sync()
 	return fp, nil
+}
+
+func (s *Store) ReadID(ID uint64) (*Needle, error) {
+	if p, ok := s.idx.Get(ID); ok {
+		n, err := s.ReadNeedleWithOffsetAndSize(p.offset, p.size)
+		if err != nil {
+			return nil, err
+		}
+		return n, nil
+	}
+	return nil, nil
 }
 
 func (s *Store) ReadNeedleAt(offset int64) (*Needle, error) {

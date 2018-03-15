@@ -1,6 +1,8 @@
 package store
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+)
 
 func Uint32ToBytes(i uint32) []byte {
 	buf := make([]byte, 4)

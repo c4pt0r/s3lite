@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/c4pt0r/s3lite/meta"
+	log "github.com/sirupsen/logrus"
 )
 
 type StorageNodeInfo struct {
@@ -21,7 +22,8 @@ func (d *StoreNodeDelegate) NodeMeta(limit int) []byte {
 	if len(buf) > limit {
 		panic("node meta is too large")
 	}
-	return []byte(buf)
+	log.Info("Update NodeMeta: ", string(buf))
+	return buf
 }
 
 func (d *StoreNodeDelegate) NotifyMsg([]byte) {
